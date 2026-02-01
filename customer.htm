@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apni Dukan | Customer Portal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap');
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: #f8fafd;
+        }
+
+        .gradient-orange {
+            background: linear-gradient(135deg, #fc8019 0%, #ff6600 100%);
+        }
+
+        .swiggy-card {
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);
+            border: 1px solid #f1f5f9;
+            transition: 0.3s;
+            cursor: pointer;
+        }
+
+        .swiggy-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 15px 30px -10px rgba(252, 128, 25, 0.2);
+        }
+
+        .modal-bg {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(2, 6, 23, 0.8);
+            backdrop-filter: blur(8px);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .modal-bg.active {
+            display: flex;
+        }
+
+        #storeFront {
+            display: none;
+        }
+    </style>
+</head>
+
+<body class="pb-10">
+
+    <div id="shopSearch" class="fixed inset-0 bg-white z-[200] flex flex-col p-6 overflow-y-auto">
+        <div class="w-full max-w-md mx-auto pt-10 text-center">
+            <div
+                class="w-16 h-16 gradient-orange rounded-[22px] flex items-center justify-center text-white text-3xl mx-auto mb-4 shadow-xl">
+                🏪</div>
+            <h1 class="text-3xl font-black mb-1 text-slate-900 tracking-tighter uppercase">APNI DUKAN</h1>
+            <p class="text-slate-400 font-bold mb-10 uppercase tracking-widest text-[9px]">Tap on a shop to enter</p>
+
+            <div class="text-left">
+                <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-1">Featured Stores
+                </h3>
+                <div id="liveShopList" class="space-y-4">
+                    <div class="p-8 bg-slate-50 rounded-3xl animate-pulse"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="storeFront">
+        <header
+            class="bg-white/80 backdrop-blur-md sticky top-0 z-50 px-6 py-5 flex justify-between items-center border-b border-slate-100 shadow-sm">
+            <div class="flex items-center gap-3">
+                <div
+                    class="w-10 h-10 gradient-orange rounded-xl flex items-center justify-center text-white text-xl shadow-lg">
+                    🏪</div>
+                <div>
+                    <h1 id="displayStoreName"
+                        class="font-black text-xl tracking-tighter text-slate-900 uppercase leading-none">STORE</h1>
+                    <p class="text-[9px] font-bold text-green-500 uppercase tracking-widest mt-1">● Online</p>
+                </div>
+            </div>
+            <button onclick="location.reload()"
+                class="bg-slate-100 px-4 py-2 rounded-full text-[10px] font-black text-slate-400">EXIT</button>
+        </header>
+
+        <main class="container mx-auto px-4 py-8">
+            <div id="productGrid" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6"></div>
+        </main>
+    </div>
+
+    <div id="productModal" class="modal-bg" onclick="closeModal()">
+        <div class="bg-white w-full max-w-sm rounded-[40px] p-8 text-center" onclick="event.stopPropagation()">
+            <div id="modalIcon"
+                class="w-24 h-24 bg-orange-50 text-orange-600 rounded-3xl flex items-center justify-center text-5xl font-black mx-auto mb-6">
+                ?</div>
+            <h2 id="modalName" class="text-2xl font-black text-slate-900 uppercase">Product Name</h2>
+            <p id="modalStatus" class="text-[10px] font-black uppercase tracking-widest mt-2">In Stock</p>
+
+            <div class="my-8 pt-6 border-t border-slate-50">
+                <p class="text-[10px] font-bold text-slate-400 uppercase mb-1">Price</p>
+                <p id="modalPrice" class="text-3xl font-black text-orange-500">₹0</p>
+            </div>
+
+            <button onclick="closeModal()"
+                class="w-full bg-slate-100 text-slate-400 py-4 rounded-2xl font-black uppercase text-xs">Back to
+                Shop</button>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyC7rymKFcFaUN2Q1FOa6yFeio2HevwQzIc",
+            authDomain: "apnidukan-34358.firebaseapp.com",
+            databaseURL: "https://apnidukan-34358-default-rtdb.firebaseio.com",
+            projectId: "apnidukan-34358",
+            storageBucket: "apnidukan-34358.firebasestorage.app",
+            messagingSenderId: "162186968181",
+            appId: "1:162186968181:web:ea793e7579b5bf483b8c3c"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // Load all active shops
+        function listShops() {
+            db.ref('stores').on('value', snap => {
+                const list = document.getElementById('liveShopList');
+                list.innerHTML = '';
+                const stores = snap.val();
+                if (!stores) return list.innerHTML = "<p class='text-center text-slate-300 py-10'>No shops found.</p>";
+
+                Object.entries(stores).forEach(([id, info]) => {
+                    const trialOver = (Date.now() - info.joinedDate) > (30 * 24 * 60 * 60 * 1000);
+                    if (!trialOver || info.isPaid) {
+                        const card = document.createElement('div');
+                        card.className = "swiggy-card bg-white p-5 rounded-[28px] flex items-center justify-between";
+                        card.onclick = () => enterShop(id, info.displayName);
+                        card.innerHTML = `
+                            <div class="flex items-center gap-4">
+                                <div class="w-14 h-14 bg-orange-50 text-orange-600 rounded-2xl flex items-center justify-center text-2xl font-black">${info.displayName.charAt(0)}</div>
+                                <div>
+                                    <h4 class="font-black text-slate-800 uppercase text-sm leading-tight">${info.displayName}</h4>
+                                    <p class="text-[9px] font-bold text-green-500 uppercase tracking-widest">Tap to Enter</p>
+                                </div>
+                            </div>
+                            <div class="text-slate-300 text-xl">➜</div>
+                        `;
+                        list.appendChild(card);
+                    }
+                });
+            });
+        }
+
+        // Enter a specific shop
+        function enterShop(sid, name) {
+            document.getElementById('displayStoreName').innerText = name;
+            document.getElementById('shopSearch').style.display = 'none';
+            document.getElementById('storeFront').style.display = 'block';
+            loadStock(sid);
+        }
+
+        // Load items for the clicked shop
+        function loadStock(sid) {
+            db.ref('inventory/' + sid).on('value', snap => {
+                const grid = document.getElementById('productGrid');
+                grid.innerHTML = '';
+                const items = snap.val();
+                if (!items) return grid.innerHTML = "<p class='col-span-full text-center py-20 text-slate-400 font-bold'>Empty shop.</p>";
+
+                Object.entries(items).forEach(([key, item]) => {
+                    const card = document.createElement('div');
+                    card.className = "swiggy-card bg-white rounded-[32px] p-5 flex flex-col items-center relative";
+                    card.onclick = () => openProductDetails(item);
+                    card.innerHTML = `
+                        <div class="w-16 h-16 mb-4 bg-orange-50 text-orange-600 rounded-full flex items-center justify-center text-2xl font-black">${item.name.charAt(0).toUpperCase()}</div>
+                        <h4 class="font-bold text-slate-800 text-sm capitalize truncate w-full text-center">${item.name}</h4>
+                        <div class="w-full flex justify-between items-center mt-6">
+                            <span class="text-orange-500 font-black text-sm">₹${item.price}</span>
+                            <span class="bg-slate-100 text-slate-400 text-[9px] font-black px-2 py-1 rounded-md uppercase">${item.qty > 0 ? 'In Stock' : 'Out'}</span>
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                });
+            });
+        }
+
+        // Product Details Popup
+        function openProductDetails(item) {
+            document.getElementById('modalIcon').innerText = item.name.charAt(0).toUpperCase();
+            document.getElementById('modalName').innerText = item.name;
+            document.getElementById('modalPrice').innerText = "₹" + item.price;
+            document.getElementById('modalStatus').innerText = item.qty > 0 ? "Currently In Stock" : "Temporarily Out of Stock";
+            document.getElementById('modalStatus').className = `text-[10px] font-black uppercase tracking-widest mt-2 ${item.qty > 0 ? 'text-green-500' : 'text-red-500'}`;
+            document.getElementById('productModal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('productModal').classList.remove('active');
+        }
+
+        listShops();
+    </script>
+</body>
+
+</html>
